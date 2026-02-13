@@ -100,7 +100,7 @@ router.post('/login', async (req: Request, res: Response) => {
         layers,
       },
       config.jwt.secret,
-      { expiresIn: config.jwt.expiry } as jwt.SignOptions
+      { expiresIn: config.jwt.expiry as any }
     );
 
     // Audit: login event
