@@ -24,7 +24,7 @@ export const config = {
   },
 
   foray: {
-    apiUrl: process.env.FORAY_API_URL || 'http://localhost:3000',
+    apiUrl: process.env.FORAY_API_URL || 'https://foray.dunin7.com',
   },
 
   logging: {
