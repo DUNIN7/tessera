@@ -1,0 +1,64 @@
+# =============================================================================
+# TESSERA - Secure Document Redaction & Access Control System
+# Docker Compose Configuration
+# 
+# Owner/Licensor: Marvin Percival — marvinp@dunin7.com
+# Repository:     github.com/DUNIN7/tessera
+# License:        Business Source License 1.1 (BSL 1.1)
+#
+# Runs alongside FORAY Protocol on the same host. FORAY uses its own ports;
+# Tessera binds to port 3100.
+# =============================================================================
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: tessera-db
+    environment:
+      POSTGRES_DB: tessera
+      POSTGRES_USER: tessera
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-tessera_dev_only}
+    ports:
+      - "5433:5432"  # 5433 to avoid conflict with any host PostgreSQL or FORAY DB
+    volumes:
+      - tessera-data:/var/lib/postgresql/data
+      - ./src/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./src/db/markup-schema.sql:/docker-entrypoint-initdb.d/02-markup-schema.sql
+      - ./src/db/crypto-schema.sql:/docker-entrypoint-initdb.d/03-crypto-schema.sql
+      - ./src/db/phase56-schema.sql:/docker-entrypoint-initdb.d/04-phase56-schema.sql
+      - ./src/db/seed.sql:/docker-entrypoint-initdb.d/05-seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tessera"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  app:
+    build: .
+    container_name: tessera-app
+    ports:
+      - "3100:3100"
+    environment:
+      NODE_ENV: development
+      PORT: 3100
+      DATABASE_URL: postgres://tessera:${DB_PASSWORD:-tessera_dev_only}@db:5432/tessera
+      JWT_SECRET: ${JWT_SECRET:-tessera_dev_jwt_secret_change_in_production}
+      JWT_EXPIRY: 15m
+      SESSION_INACTIVITY_TIMEOUT: 900  # 15 minutes in seconds (Spec §10.4)
+      FORAY_API_URL: ${FORAY_API_URL:-http://host.docker.internal:3000}
+      TESSERA_UPLOAD_DIR: /app/data/uploads
+      TESSERA_NORMALIZED_DIR: /app/data/normalized
+      LOG_LEVEL: debug
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src
+      - tessera-uploads:/app/data/uploads
+      - tessera-normalized:/app/data/normalized
+    command: npx tsx watch src/server.ts
+
+volumes:
+  tessera-data:
+  tessera-uploads:
+  tessera-normalized:

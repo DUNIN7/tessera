@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment (NEVER commit secrets)
+.env
+.env.local
+.env.production
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker volumes (local data)
+tessera-data/
+tessera-uploads/
+tessera-normalized/
+
+# Uploaded documents (sensitive content)
+uploads/
+data/
+
+# Coverage reports
+coverage/
+
+# Temporary files
+*.tmp
+*.bak

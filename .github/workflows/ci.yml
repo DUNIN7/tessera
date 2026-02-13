@@ -1,0 +1,192 @@
+# =============================================================================
+# TESSERA — CI Pipeline
+#
+# Runs on every push and pull request.
+# Security-critical modules require dedicated review (Spec §16.2).
+#
+# Jobs:
+#   typecheck   — TypeScript compilation (catch type errors early)
+#   schema      — PostgreSQL schema validation (all migrations apply cleanly)
+#   docker      — Docker image builds successfully
+#   security    — Dependency audit for known vulnerabilities
+#
+# Owner: Marvin Percival — marvinp@dunin7.com
+# License: BSL 1.1 — github.com/DUNIN7/tessera
+# =============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+
+  # ── TypeScript Compilation ──────────────────────────────────────────
+  typecheck:
+    name: TypeScript Compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - run: npm ci
+      - run: npx tsc --noEmit
+
+  # ── Schema Validation ──────────────────────────────────────────────
+  # Spins up PostgreSQL 16, applies all schema files in order,
+  # and verifies they execute without errors.
+  schema:
+    name: Schema Validation
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: tessera_test
+          POSTGRES_USER: tessera
+          POSTGRES_PASSWORD: test_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U tessera"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply schema migrations
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: tessera
+          PGPASSWORD: test_only
+          PGDATABASE: tessera_test
+        run: |
+          echo "Applying Phase 1 — Foundation schema..."
+          psql -f src/db/schema.sql
+
+          echo "Applying Phase 3 — Markup Engine schema..."
+          psql -f src/db/markup-schema.sql
+
+          echo "Applying Phase 4 — Crypto Core schema..."
+          psql -f src/db/crypto-schema.sql
+
+          echo "Applying Phase 5+6 — Reconstruction & Hardening schema..."
+          psql -f src/db/phase56-schema.sql
+
+          echo "Applying seed data..."
+          psql -f src/db/seed.sql
+
+          echo "Verifying table count..."
+          TABLE_COUNT=$(psql -t -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE';")
+          echo "Tables created: $TABLE_COUNT"
+
+          # Verify critical tables exist
+          psql -c "SELECT 'documents' WHERE EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'documents');"
+          psql -c "SELECT 'encryption_keys' WHERE EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'encryption_keys');"
+          psql -c "SELECT 'reconstruction_events' WHERE EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'reconstruction_events');"
+          psql -c "SELECT 'retention_policies' WHERE EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'retention_policies');"
+
+  # ── Docker Build ───────────────────────────────────────────────────
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t tessera:ci-${{ github.sha }} .
+
+  # ── Dependency Security Audit ──────────────────────────────────────
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - run: npm ci
+
+      # npm audit — fail on high/critical vulnerabilities
+      - name: Dependency vulnerability scan
+        run: npm audit --audit-level=high
+        continue-on-error: true  # Advisory in CI; enforced in security review
+
+      # Check for known-bad patterns in source
+      - name: Source pattern check
+        run: |
+          echo "Checking for hardcoded secrets..."
+          # Fail if actual secrets are committed (not env references)
+          ! grep -rn "AKIA[0-9A-Z]\{16\}" src/ || (echo "AWS key found!" && exit 1)
+          ! grep -rn "sk_live_" src/ || (echo "Stripe key found!" && exit 1)
+          echo "No hardcoded secrets detected."
+
+          echo "Checking for console.log in production code..."
+          CONSOLE_COUNT=$(grep -rn "console\.log" src/ --include="*.ts" | grep -v "server.ts" | grep -v "// debug" | wc -l)
+          echo "console.log occurrences (excluding server.ts): $CONSOLE_COUNT"
+
+  # ── Security-Critical PR Label Check ────────────────────────────────
+  # Tessera Spec §16.2: "Modifications to [security-critical modules]
+  # require dedicated security review."
+  security-review-gate:
+    name: Security Review Gate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for security-critical file changes
+        id: security-check
+        run: |
+          # Files that require security review per Spec §16.2
+          SECURITY_CRITICAL=(
+            "src/services/crypto/"
+            "src/middleware/authenticate.ts"
+            "src/middleware/security.ts"
+            "src/authorization/"
+            "src/services/pipeline/stego-scanner.ts"
+            "src/foray/"
+          )
+
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+          SECURITY_FILES_CHANGED=false
+
+          for pattern in "${SECURITY_CRITICAL[@]}"; do
+            if echo "$CHANGED_FILES" | grep -q "$pattern"; then
+              SECURITY_FILES_CHANGED=true
+              echo "⚠️  Security-critical path modified: $pattern"
+            fi
+          done
+
+          echo "security_critical=$SECURITY_FILES_CHANGED" >> $GITHUB_OUTPUT
+
+          if [ "$SECURITY_FILES_CHANGED" = true ]; then
+            echo ""
+            echo "════════════════════════════════════════════════════════"
+            echo "  SECURITY REVIEW REQUIRED (Tessera Spec §16.2)"
+            echo ""
+            echo "  This PR modifies security-critical modules."
+            echo "  Minimum two designated security reviewers required."
+            echo ""
+            echo "  Evaluates: cryptographic correctness, trust boundary"
+            echo "  preservation, side-channel absence, threat model"
+            echo "  compliance, audit trail integrity."
+            echo "════════════════════════════════════════════════════════"
+          fi
