@@ -345,7 +345,6 @@ describe('Phase 6: Reconstruction (§9)', () => {
       { accessLevelId: publicAccessLevelId },
     );
 
-    if (![200, 403].includes(res.status)) { const errBody = await res.json().catch(() => res.text()); console.error("VIEWER RECONSTRUCTION ERROR:", res.status, errBody); }
     expect([200, 403]).toContain(res.status);
 
     if (res.status === 200) {
