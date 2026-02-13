@@ -38,3 +38,16 @@ coverage/
 # Temporary files
 *.tmp
 *.bak
+
+Applying
+Downloading
+Fetching
+Installing
+Patching
+Pouring
+cmake
+configure
+make
+make.sh
+meson
+python3

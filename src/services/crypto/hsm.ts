@@ -214,8 +214,9 @@ export function getHsmProvider(): IHsmProvider {
  * Save key metadata to the database. (§10.2)
  * Only metadata — actual key material stays in the HSM.
  */
-export async function saveKeyRecord(record: KeyRecord): Promise<void> {
-  await pool.query(
+export async function saveKeyRecord(record: KeyRecord, queryClient?: { query: Function }): Promise<void> {
+  const db = queryClient || pool;
+  await db.query(
     `INSERT INTO encryption_keys
        (id, document_id, content_set_identifier, organization_id,
         hsm_key_handle, algorithm, shamir_threshold, shamir_total_shares,

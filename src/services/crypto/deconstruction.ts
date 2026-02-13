@@ -258,7 +258,7 @@ export async function executeDeconstruction(params: {
       keyRecords.push(keyRecord);
 
       // Save key record to database
-      await saveKeyRecord(keyRecord);
+      await saveKeyRecord(keyRecord, client);
 
       // Split key using Shamir's Secret Sharing (§10.2)
       // In production, holder IDs would come from org configuration.

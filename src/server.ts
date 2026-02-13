@@ -59,7 +59,7 @@ app.use(requestSanitization()); // Null-byte stripping, size validation
 // Rate limiting (Tessera v3.1 §10.4: defense against brute-force)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20, // 20 login attempts per window
+  max: parseInt(process.env.RATE_LIMIT_AUTH_MAX || '20', 10),
   message: { error: 'Too many authentication attempts. Try again later.' },
   standardHeaders: true,
   legacyHeaders: false,

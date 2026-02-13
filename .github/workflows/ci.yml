@@ -108,6 +108,86 @@ jobs:
       - name: Build Docker image
         run: docker build -t tessera:ci-${{ github.sha }} .
 
+  # ── Crypto Unit Tests ───────────────────────────────────────────────
+  # Tests the cryptographic primitives: AES-256-GCM, SHA-512 integrity,
+  # tamper detection, key rotation, and AAD binding.
+  test-crypto:
+    name: Crypto Primitives
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - run: npm ci
+      - run: npx jest --runInBand tests/05-crypto-primitives.test.ts --forceExit
+
+  # ── Integration Tests ──────────────────────────────────────────────
+  # Spins up PostgreSQL, seeds data, starts Tessera, and runs the full
+  # test suite: auth, role enforcement, document lifecycle, crypto pipeline.
+  test-integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: tessera
+          POSTGRES_USER: tessera
+          POSTGRES_PASSWORD: test_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U tessera"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=5
+    env:
+      DATABASE_URL: postgres://tessera:test_only@localhost:5432/tessera
+      JWT_SECRET: ci_test_jwt_secret
+      FORAY_API_URL: http://localhost:3000
+      PORT: 3100
+      TESSERA_UPLOAD_DIR: /tmp/tessera-uploads
+      TESSERA_NORMALIZED_DIR: /tmp/tessera-normalized
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Apply schemas and seed data
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: tessera
+          PGPASSWORD: test_only
+          PGDATABASE: tessera
+        run: |
+          psql -f src/db/schema.sql
+          psql -f src/db/markup-schema.sql
+          psql -f src/db/crypto-schema.sql
+          psql -f src/db/phase56-schema.sql || true
+          psql -f src/db/seed.sql
+
+      - name: Create upload directories
+        run: mkdir -p /tmp/tessera-uploads /tmp/tessera-normalized
+
+      - name: Start Tessera server
+        run: |
+          npx tsx src/server.ts &
+          sleep 5
+          curl -sf http://localhost:3100/api/health || (echo "Server failed to start" && exit 1)
+
+      - name: Run integration tests
+        run: npx jest --runInBand tests/01-health.test.ts tests/02-auth.test.ts tests/03-role-enforcement.test.ts tests/04-document-lifecycle.test.ts --forceExit
+
   # ── Dependency Security Audit ──────────────────────────────────────
   security:
     name: Security Audit

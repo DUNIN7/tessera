@@ -115,7 +115,7 @@ export async function reconstructDocument(
   }
 
   const baseDoc = baseDocResult.rows[0];
-  const markers: PositionalMarker[] = JSON.parse(baseDoc.markers);
+  const markers: PositionalMarker[] = typeof baseDoc.markers === "string" ? JSON.parse(baseDoc.markers) : baseDoc.markers;
 
   // ── Step 3: Verify base document integrity (§9.2 step 1) ──────────
 
@@ -158,7 +158,7 @@ export async function reconstructDocument(
     }
 
     const row = encResult.rows[0];
-    const envelope: EncryptedEnvelope = JSON.parse(row.encrypted_envelope);
+    const envelope: EncryptedEnvelope = typeof row.encrypted_envelope === "string" ? JSON.parse(row.encrypted_envelope) : row.encrypted_envelope;
 
     // Verify ciphertext hash against stored hash (§9.2 step 1)
     if (sha512(Buffer.from(envelope.ciphertext, 'base64')) !== row.ciphertext_hash) {
