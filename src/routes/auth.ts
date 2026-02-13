@@ -91,7 +91,8 @@ router.post('/login', async (req: Request, res: Response) => {
     );
 
     // Generate JWT
-    // @ts-ignore — jwt.sign overload types incompatible with string config values    const token = (jwt.sign as any)(
+    // @ts-ignore — jwt.sign overload types incompatible with string config values
+    const token = (jwt.sign as any)(
       {
         sub: user.id,
         jti: tokenId,
