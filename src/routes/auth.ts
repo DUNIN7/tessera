@@ -91,7 +91,7 @@ router.post('/login', async (req: Request, res: Response) => {
     );
 
     // Generate JWT
-    const token = jwt.sign(
+    const token = (jwt.sign as any)(
       {
         sub: user.id,
         jti: tokenId,
@@ -100,7 +100,7 @@ router.post('/login', async (req: Request, res: Response) => {
         layers,
       },
       config.jwt.secret,
-      { expiresIn: config.jwt.expiry } as any
+      { expiresIn: config.jwt.expiry }
     );
 
     // Audit: login event
