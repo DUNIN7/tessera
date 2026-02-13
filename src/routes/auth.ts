@@ -13,12 +13,12 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
-import { pool } from '../../db/pool';
-import { config } from '../../config';
-import { ROLE_LAYER_MAP, UserRole, RoleLayer } from '../../types/roles';
-import { authenticate } from '../../middleware/authenticate';
-import { AuthenticatedRequest } from '../../types/auth';
-import { recordAuditEvent } from '../../services/audit';
+import { pool } from '../db/pool';
+import { config } from '../config';
+import { ROLE_LAYER_MAP, UserRole, RoleLayer } from '../types/roles';
+import { authenticate } from '../middleware/authenticate';
+import { AuthenticatedRequest } from '../types/auth';
+import { recordAuditEvent } from '../services/audit';
 
 const router = Router();
 
