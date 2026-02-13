@@ -3,7 +3,7 @@ import { UserRole, RoleLayer } from './roles';
 declare global {
   namespace Express {
     interface Request {
-      user?: {
+      user: {
         id: string;
         organizationId: string;
         email: string;
@@ -13,7 +13,7 @@ declare global {
         sessionId: string;
         tokenId: string;
       };
-      requestId?: string;
+      requestId: string;
     }
   }
 }
